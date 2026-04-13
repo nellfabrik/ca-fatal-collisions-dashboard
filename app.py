@@ -7,7 +7,6 @@ from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import mapclassify
 import json
-import os
 
 st.set_page_config(page_title="CA Fatal Collisions (2011-2022)", layout="wide", initial_sidebar_state="expanded")
 
@@ -82,7 +81,7 @@ type and location characteristics.
 
     st.markdown("### 🗺️  How Map Colors Work")
     st.markdown("""
-Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Tiers are based on patterns in the data. Each tier is created to best group counties with similar counts together. 
+Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Tiers are based on patterns in the data. Each tier is created to best group counties with similar counts together.
 
 **Colors update automatically** when you switch the victim role filter.
     """)
@@ -101,30 +100,56 @@ Suburban Places in California"*](https://journals.sagepub.com/doi/abs/10.1177/03
 (Frost, A.R. et al., 2018, *Transportation Research Record*, 2672(3), 130–144).
     """)
 
-# ── Load data ──
+# ── Load pre-aggregated data (tiny files, not 3.5M rows) ──
 @st.cache_data
-def load_data():
-    return pd.read_parquet(os.path.expanduser("~/Documents/interactive-dashboard/processed_data.parquet"))
+def load_kpis():
+    with open("aggregated/kpis.json") as f:
+        return json.load(f)
+
+@st.cache_data
+def load_county_stats():
+    return pd.read_parquet("aggregated/county_stats.parquet")
+
+@st.cache_data
+def load_role_county():
+    return pd.read_parquet("aggregated/role_county.parquet")
+
+@st.cache_data
+def load_role_counts():
+    return pd.read_parquet("aggregated/role_counts.parquet")
+
+@st.cache_data
+def load_int_by_year():
+    return pd.read_parquet("aggregated/int_by_year.parquet")
+
+@st.cache_data
+def load_rtor():
+    return pd.read_parquet("aggregated/rtor_by_placetype.parquet")
 
 @st.cache_data
 def load_counties():
-    counties = gpd.read_file(os.path.expanduser("~/Documents/interactive-dashboard/ca_counties/CA_Counties.shp"))
+    counties = gpd.read_file("ca_counties/CA_Counties.shp")
     counties = counties.to_crs(epsg=4326)
     counties["geometry"] = counties["geometry"].simplify(0.003)
     counties["NAME_UPPER"] = counties["NAME"].str.upper()
     return counties
 
-df = load_data()
+kpis = load_kpis()
+county_stats = load_county_stats()
+role_county = load_role_county()
+role_counts = load_role_counts()
+int_by_year = load_int_by_year()
+rtor_counts = load_rtor()
 counties = load_counties()
 
-# ── Compute KPIs ──
-total_killed = int(df["NUMBER_KILLED"].sum())
-total_rows = len(df)
-ped_killed = int(df["COUNT_PED_KILLED"].sum())
-cyc_killed = int(df["COUNT_BICYCLIST_KILLED"].sum())
-other_killed = total_killed - ped_killed - cyc_killed
+# ── KPIs ──
+total_killed = kpis["total_killed"]
+total_rows = kpis["total_rows"]
+ped_killed = kpis["ped_killed"]
+cyc_killed = kpis["cyc_killed"]
+other_killed = kpis["other_killed"]
 
-role_map_full = {"1": "Driver", "2": "Passenger", "3": "Pedestrian", "4": "Bicyclist"}
+# ── Prepare merged county geodata ──
 pie_colors = {"Driver": "#d4a017", "Passenger": "#e8465f", "Pedestrian": "#ff69b4", "Bicyclist": "#21ba45", "Other": "#888888"}
 
 color_map = {
@@ -136,32 +161,6 @@ color_map = {
     "Employment Centers": "#6b8a3a",
     "Special Districts": "#d1d1d1",
 }
-
-int_fatal = df[(df["INTERSECTION"] == "Y") & (df["NUMBER_KILLED"] > 0)].copy()
-int_fatal["Role"] = int_fatal["VICTIM_ROLE"].map(role_map_full).fillna("Other")
-rtor = df[(df["MOVE_PRE_ACC"] == "D") & (df["PlaceType"] != "Unknown")]
-
-county_stats = (
-    df.groupby("COUNTY")
-    .agg(
-        total_fatalities=("NUMBER_KILLED", "sum"),
-        total_collisions=("NUMBER_KILLED", "size"),
-        ped_killed=("COUNT_PED_KILLED", "sum"),
-        cyc_killed=("COUNT_BICYCLIST_KILLED", "sum"),
-    )
-    .reset_index()
-)
-
-placetype_dom = (
-    df[df["PlaceType"] != "Unknown"]
-    .groupby("COUNTY")["PlaceType"]
-    .agg(lambda x: x.value_counts().index[0] if len(x) > 0 else "Unknown")
-    .reset_index()
-)
-placetype_dom.columns = ["COUNTY", "Top_Crash_Zone"]
-
-county_stats = county_stats.merge(placetype_dom, on="COUNTY", how="left")
-county_stats["other_killed"] = county_stats["total_fatalities"] - county_stats["ped_killed"] - county_stats["cyc_killed"]
 
 counties_merged = counties.merge(county_stats, left_on="NAME_UPPER", right_on="COUNTY", how="left").fillna(0)
 
@@ -175,11 +174,10 @@ def fmt_k(n):
 
 
 # ════════════════════════════════════════════════════════
-# ROW 1 — 4 columns matching the screenshot layout
+# ROW 1 — 4 columns
 # ════════════════════════════════════════════════════════
 r1c1, r1c2, r1c3, r1c4 = st.columns([0.8, 2.5, 0.8, 1.2])
 
-# ── Col 1: Overall Fatal KPI (tall) ──
 with r1c1:
     st.markdown(
         f"""
@@ -192,7 +190,6 @@ with r1c1:
         unsafe_allow_html=True,
     )
 
-# ── Col 2: Filter dropdown + Choropleth map ──
 with r1c2:
     selected_role = st.selectbox(
         "Filter map by victim role:",
@@ -202,34 +199,28 @@ with r1c2:
     if selected_role == "All Fatalities":
         selected_role = None
 
-    # Prepare map data
     if selected_role:
-        role_data = int_fatal[int_fatal["Role"] == selected_role]
-        role_county = role_data.groupby("COUNTY")["NUMBER_KILLED"].sum().reset_index()
-        role_county.columns = ["COUNTY", "display_fatalities"]
-        map_data = counties.merge(role_county, left_on="NAME_UPPER", right_on="COUNTY", how="left")
+        role_data = role_county[role_county["Role"] == selected_role]
+        role_data_county = role_data.rename(columns={"fatalities": "display_fatalities"})
+        map_data = counties.merge(role_data_county, left_on="NAME_UPPER", right_on="COUNTY", how="left")
         map_data["display_fatalities"] = map_data["display_fatalities"].fillna(0)
-        map_data = map_data.merge(placetype_dom, on="COUNTY", how="left")
-        map_data["Top_Crash_Zone"] = map_data["Top_Crash_Zone"].fillna("Unknown")
         map_data = map_data.merge(
-            county_stats[["COUNTY", "total_fatalities", "ped_killed", "cyc_killed", "other_killed"]],
+            county_stats[["COUNTY", "total_fatalities", "ped_killed", "cyc_killed", "other_killed", "Top_Crash_Zone"]],
             on="COUNTY",
             how="left",
         )
         map_data = map_data.fillna(0)
+        map_data["Top_Crash_Zone"] = map_data["Top_Crash_Zone"].fillna("Unknown")
     else:
         map_data = counties_merged.copy()
         map_data["display_fatalities"] = map_data["total_fatalities"]
 
-    # Jenks natural breaks (5 classes)
     max_val = max(map_data["display_fatalities"].max(), 1)
-    current_vals = map_data["display_fatalities"]
-    current_vals_pos = current_vals[current_vals > 0]
+    current_vals_pos = map_data["display_fatalities"][map_data["display_fatalities"] > 0]
     if len(current_vals_pos) >= 5:
         jenks = mapclassify.NaturalBreaks(current_vals_pos, k=5)
-        breaks = jenks.bins  # array of 5 upper bounds
+        breaks = jenks.bins
         b1, b2, b3, b4 = breaks[0], breaks[1], breaks[2], breaks[3]
-        # breaks[4] is the max
     elif len(current_vals_pos) > 1:
         b1 = np.percentile(current_vals_pos, 20)
         b2 = np.percentile(current_vals_pos, 40)
@@ -241,7 +232,6 @@ with r1c2:
     top3 = map_data.nlargest(3, "display_fatalities")
     filter_label = selected_role if selected_role else "All Fatalities"
 
-    # Tooltips
     if selected_role:
         map_data["tooltip_text"] = map_data.apply(
             lambda r: (
@@ -270,18 +260,17 @@ with r1c2:
         if val == 0:
             fill = "#1a1a1a"
         elif val <= b1:
-            fill = "#6b7fb5"   # muted blue — Low
+            fill = "#6b7fb5"
         elif val <= b2:
-            fill = "#3bb3a0"   # teal — Moderate
+            fill = "#3bb3a0"
         elif val <= b3:
-            fill = "#e8c840"   # gold — High
+            fill = "#e8c840"
         elif val <= b4:
-            fill = "#ff9922"   # orange — Very High
+            fill = "#ff9922"
         else:
-            fill = "#e03020"   # red — Critical
+            fill = "#e03020"
         return {"fillColor": fill, "color": "#666", "weight": 1.5, "fillOpacity": 0.5}
 
-    # Build folium map
     m = folium.Map(location=[37.2, -119.5], zoom_start=6, tiles="CartoDB dark_matter")
 
     geojson_data = json.loads(map_data.to_json())
@@ -296,7 +285,6 @@ with r1c2:
         highlight_function=lambda x: {"weight": 3, "color": "white", "fillOpacity": 0.95},
     ).add_to(m)
 
-    # Collapsible Top 3 Counties — top left
     top3_rows = ""
     for idx, (_, row) in enumerate(top3.iterrows()):
         top3_rows += (
@@ -314,7 +302,6 @@ with r1c2:
     """
     m.get_root().html.add_child(folium.Element(top3_html))
 
-    # Collapsible Legend — top right
     legend_html = f"""
     <div style="position:absolute;top:10px;right:10px;z-index:1000;">
     <details style="background:rgba(26,26,26,0.88);padding:10px 14px;border-radius:6px;border:1px solid #444;color:white;font-size:11px;cursor:pointer;">
@@ -334,7 +321,6 @@ with r1c2:
 
     st_folium(m, width=None, height=380, returned_objects=[])
 
-# ── Col 3: Three stacked KPIs ──
 with r1c3:
     st.markdown(
         f"""
@@ -364,9 +350,7 @@ with r1c3:
         unsafe_allow_html=True,
     )
 
-# ── Col 4: Pie chart ──
 with r1c4:
-    role_counts = int_fatal.groupby("Role").size().reset_index(name="Count")
     fig_pie = go.Figure(
         go.Pie(
             labels=role_counts["Role"],
@@ -397,8 +381,6 @@ with r1c4:
 r2c1, r2c2 = st.columns(2)
 
 with r2c1:
-    int_by_year = df[df["INTERSECTION"] == "Y"].groupby("YEAR")["NUMBER_KILLED"].sum().reset_index()
-    int_by_year = int_by_year[(int_by_year["YEAR"] >= 2011) & (int_by_year["YEAR"] <= 2022)]
     fig_line = go.Figure()
     fig_line.add_trace(
         go.Scatter(
@@ -426,16 +408,15 @@ with r2c1:
     st.plotly_chart(fig_line, use_container_width=True)
 
 with r2c2:
-    counts = rtor.groupby("PlaceType").size().reset_index(name="Count")
-    counts = counts.sort_values("Count", ascending=True)
-    bar_colors = [color_map.get(pt, "#767676") for pt in counts["PlaceType"]]
+    rtor_sorted = rtor_counts.sort_values("Count", ascending=True)
+    bar_colors = [color_map.get(pt, "#767676") for pt in rtor_sorted["PlaceType"]]
     fig_bar = go.Figure(
         go.Bar(
-            x=counts["Count"],
-            y=counts["PlaceType"],
+            x=rtor_sorted["Count"],
+            y=rtor_sorted["PlaceType"],
             orientation="h",
             marker_color=bar_colors,
-            text=counts["Count"].apply(lambda x: f"{x:,}"),
+            text=rtor_sorted["Count"].apply(lambda x: f"{x:,}"),
             textposition="outside",
             textfont=dict(color="white", size=12),
             hoverinfo="none",
@@ -446,7 +427,7 @@ with r2c2:
         plot_bgcolor="#1e1e1e",
         paper_bgcolor="#1e1e1e",
         font=dict(color="white"),
-        xaxis=dict(showgrid=True, gridcolor="#333", range=[0, counts["Count"].max() * 1.15]),
+        xaxis=dict(showgrid=True, gridcolor="#333", range=[0, rtor_sorted["Count"].max() * 1.15]),
         yaxis=dict(showgrid=False),
         height=340,
         margin=dict(l=10, r=70, t=50, b=40),
