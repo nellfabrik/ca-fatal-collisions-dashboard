@@ -389,7 +389,7 @@ with r1c4:
         height=430,
         margin=dict(l=50, r=50, t=55, b=20),
     )
-    st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig_pie, width="stretch")
 
 # ════════════════════════════════════════════════════════
 # ROW 2 — Line chart + Bar chart
@@ -423,7 +423,7 @@ with r2c1:
         height=340,
         margin=dict(l=50, r=20, t=50, b=45),
     )
-    st.plotly_chart(fig_line, use_container_width=True)
+    st.plotly_chart(fig_line, width="stretch")
 
 with r2c2:
     counts = rtor.groupby("PlaceType").size().reset_index(name="Count")
@@ -451,4 +451,4 @@ with r2c2:
         height=340,
         margin=dict(l=10, r=70, t=50, b=40),
     )
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
