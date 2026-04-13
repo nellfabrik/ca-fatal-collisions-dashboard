@@ -104,11 +104,11 @@ Suburban Places in California"*](https://journals.sagepub.com/doi/abs/10.1177/03
 # ── Load data ──
 @st.cache_data
 def load_data():
-    return pd.read_parquet(os.path.expanduser("~/Documents/interactive-dashboard/processed_data.parquet"))
+    return pd.read_parquet("processed_data.parquet")
 
 @st.cache_data
 def load_counties():
-    counties = gpd.read_file(os.path.expanduser("~/Documents/interactive-dashboard/ca_counties/CA_Counties.shp"))
+    counties = gpd.read_file("ca_counties/CA_Counties.shp")
     counties = counties.to_crs(epsg=4326)
     counties["geometry"] = counties["geometry"].simplify(0.003)
     counties["NAME_UPPER"] = counties["NAME"].str.upper()
