@@ -150,7 +150,7 @@ cyc_killed = kpis["cyc_killed"]
 other_killed = kpis["other_killed"]
 
 # ── Prepare merged county geodata ──
-pie_colors = {"Driver": "#d4a017", "Passenger": "#e8465f", "Pedestrian": "#ff69b4", "Bicyclist": "#21ba45", "Other": "#888888"}
+pie_colors = {"Driver": "#b07cc6", "Passenger": "#c75b7a", "Pedestrian": "#d4845e", "Bicyclist": "#5b9ec9", "Other": "#888888"}
 
 color_map = {
     "Urban Centers": "#5a4e3a",
@@ -351,16 +351,27 @@ with r1c3:
     )
 
 with r1c4:
+    # Build legend HTML
+    total_count = role_counts["Count"].sum()
+    legend_items = ""
+    for _, row in role_counts.iterrows():
+        pct = row["Count"] / total_count * 100
+        c = pie_colors.get(row["Role"], "#888")
+        legend_items += (
+            f'<div style="display:flex;align-items:center;gap:6px;margin:2px 0;">'
+            f'<span style="width:10px;height:10px;border-radius:2px;background:{c};flex-shrink:0;"></span>'
+            f'<span style="color:#ccc;font-size:12px;">{row["Role"]} — {pct:.1f}%</span>'
+            f'</div>'
+        )
+
     fig_pie = go.Figure(
         go.Pie(
             labels=role_counts["Role"],
             values=role_counts["Count"],
             marker=dict(colors=[pie_colors.get(r, "#888") for r in role_counts["Role"]]),
-            textinfo="label+percent",
-            textposition="outside",
-            textfont=dict(color="white", size=10),
-            hole=0.35,
-            hoverinfo="label+value+percent",
+            textinfo="none",
+            hole=0.45,
+            hovertemplate="%{label}<br>%{value:,} (%{percent})<extra></extra>",
             pull=[0.02] * len(role_counts),
         )
     )
@@ -370,10 +381,11 @@ with r1c4:
         paper_bgcolor="#1e1e1e",
         font=dict(color="white"),
         showlegend=False,
-        height=430,
-        margin=dict(l=50, r=50, t=55, b=20),
+        height=300,
+        margin=dict(l=30, r=30, t=55, b=10),
     )
     st.plotly_chart(fig_pie, use_container_width=True)
+    st.markdown(f'<div style="padding:0 10px;">{legend_items}</div>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
 # ROW 2 — Line chart + Bar chart
@@ -409,13 +421,12 @@ with r2c1:
 
 with r2c2:
     rtor_sorted = rtor_counts.sort_values("Count", ascending=True)
-    bar_colors = [color_map.get(pt, "#767676") for pt in rtor_sorted["PlaceType"]]
     fig_bar = go.Figure(
         go.Bar(
             x=rtor_sorted["Count"],
             y=rtor_sorted["PlaceType"],
             orientation="h",
-            marker_color=bar_colors,
+            marker_color="#f0ead6",
             text=rtor_sorted["Count"].apply(lambda x: f"{x:,}"),
             textposition="outside",
             textfont=dict(color="white", size=12),
