@@ -77,7 +77,7 @@ KPI card, line chart, and bar chart simultaneously.
     st.markdown("""
 Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Tiers are based on patterns in the data. Each tier is created to best group counties with similar counts together.
 
-**Tiers recalculate** based on the fatality counts for the selected victim role, so groupings always reflect the actual data being shown.
+**Tiers recalculate** based on the fatality counts for the selected victim role.
     """)
 
     st.markdown("---")
@@ -196,12 +196,14 @@ with r1c1:
         kpi_rows = kpis["total_rows"]
         kpi_title = "Overall Fatalities"
 
+    per_day = round(kpi_killed / 4383)
+
     st.markdown(
         f"""
     <div class="kpi-box-tall">
         <p class="kpi-label-big red">{kpi_title}</p>
         <p class="kpi-value-big red">💓 {fmt_k(kpi_killed)}</p>
-        <p class="kpi-sub">From {fmt_k(kpi_rows)} casualties</p>
+        <p class="kpi-sub">~{per_day} per day</p>
     </div>
     """,
         unsafe_allow_html=True,
@@ -333,6 +335,15 @@ with r1c2:
 
 # ── Col 3: Ped / Cyclist / Other KPIs (static) ──
 with r1c3:
+    st.markdown(
+        f"""
+    <div style="background:#2a2a2a;border-radius:8px;padding:8px;text-align:center;margin-bottom:4px;">
+        <p style="font-size:13px;color:#999;margin:0;">Overall Collision Records</p>
+        <p style="font-size:22px;font-weight:bold;color:#ccc;margin:0;">{fmt_k(kpis['total_rows'])}</p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
     st.markdown(
         f"""
     <div class="kpi-box">
