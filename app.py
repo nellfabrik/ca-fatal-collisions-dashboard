@@ -57,7 +57,6 @@ st.markdown("""
 
 # ── Title (centered, larger) ──
 st.markdown('<p class="main-title">California Fatal Collision Overview (2011–2022)</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Pedestrian, Cyclist, and Other Traffic</p>', unsafe_allow_html=True)
 
 # ── Sidebar ──
 with st.sidebar:
@@ -78,7 +77,7 @@ KPI card, line chart, and bar chart simultaneously.
     st.markdown("""
 Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Tiers are based on patterns in the data. Each tier is created to best group counties with similar counts together.
 
-**Colors update automatically** when you switch the victim role filter.
+**Tiers recalculate** based on the fatality counts for the selected victim role, so groupings always reflect the actual data being shown.
     """)
 
     st.markdown("---")
