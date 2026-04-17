@@ -66,16 +66,13 @@ This dashboard visualizes **fatal traffic collisions** across California's 58 co
 from 2011 to 2022, covering pedestrian, cyclist, and other traffic fatalities.
 It helps identify where fatal crashes concentrate and how they break down by victim
 type and location characteristics.
-
-**All sections are interactive** — use the victim role filter to update the map,
-KPI card, line chart, and bar chart simultaneously.
     """)
 
     st.markdown("---")
 
     st.markdown("### 🗺️  How Map Colors Work")
     st.markdown("""
-Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Tiers are based on patterns in the data. Each tier is created to best group counties with similar counts together.
+Counties are grouped into 5 tiers (Low to Critical) based on fatality count. Each tier is created to best group counties with similar counts together.
 
 **Tiers recalculate** based on the fatality counts for the selected victim role.
     """)
@@ -196,14 +193,15 @@ with r1c1:
         kpi_rows = kpis["total_rows"]
         kpi_title = "Overall Fatalities"
 
-    per_day = round(kpi_killed / 4383)
+    avg_per_year = f"{round(kpi_killed / 12):,}"
 
     st.markdown(
         f"""
     <div class="kpi-box-tall">
         <p class="kpi-label-big red">{kpi_title}</p>
         <p class="kpi-value-big red">💓 {fmt_k(kpi_killed)}</p>
-        <p class="kpi-sub">~{per_day} per day</p>
+        <p class="kpi-sub">From {fmt_k(kpis['total_rows'])} collision records</p>
+        <p class="kpi-sub">Average {avg_per_year} per year</p>
     </div>
     """,
         unsafe_allow_html=True,
@@ -337,17 +335,8 @@ with r1c2:
 with r1c3:
     st.markdown(
         f"""
-    <div style="background:#2a2a2a;border-radius:8px;padding:8px;text-align:center;margin-bottom:4px;">
-        <p style="font-size:13px;color:#999;margin:0;">Overall Collision Records</p>
-        <p style="font-size:22px;font-weight:bold;color:#ccc;margin:0;">{fmt_k(kpis['total_rows'])}</p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"""
     <div class="kpi-box">
-        <p class="kpi-label red">Pedestrian Fatalities</p>
+        <p class="kpi-label" style="color:#d4845e;">Pedestrian Fatalities</p>
         <p class="kpi-value white">🚶 {fmt_k(kpis['ped_killed'])}</p>
     </div>
     """,
@@ -356,7 +345,7 @@ with r1c3:
     st.markdown(
         f"""
     <div class="kpi-box">
-        <p class="kpi-label green">Cyclist Fatalities</p>
+        <p class="kpi-label" style="color:#5b9ec9;">Cyclist Fatalities</p>
         <p class="kpi-value white">🚴 {fmt_k(kpis['cyc_killed'])}</p>
     </div>
     """,
@@ -365,7 +354,7 @@ with r1c3:
     st.markdown(
         f"""
     <div class="kpi-box">
-        <p class="kpi-label yellow">Other Traffic Fatalities</p>
+        <p class="kpi-label" style="color:#aaaaaa;">Other Traffic Fatalities</p>
         <p class="kpi-value white">🚗 {fmt_k(kpis['other_killed'])}</p>
     </div>
     """,
