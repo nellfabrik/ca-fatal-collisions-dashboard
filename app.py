@@ -15,16 +15,13 @@ st.markdown("""
 <style>
     .stApp {background-color: #1a1a1a;}
 
-    /* Tighten all vertical gaps */
     [data-testid="stVerticalBlock"] {gap: 0.2rem;}
     [data-testid="column"] {padding: 0.15rem;}
     section.main > div {padding-top: 1rem;}
 
-    /* Title */
-    .main-title {color: #cccccc; font-size: 34px; font-weight: bold; margin-bottom: 0; padding-top: 0; white-space: nowrap;}
-    .sub-title {color: #888888; font-size: 14px; margin-top: -4px; margin-bottom: 6px;}
+    .main-title {color: #cccccc; font-size: 42px; font-weight: bold; margin-bottom: 0; padding-top: 0; text-align: center;}
+    .sub-title {color: #888888; font-size: 15px; margin-top: -4px; margin-bottom: 6px; text-align: center;}
 
-    /* KPI cards */
     .kpi-box-tall {
         background: #2a2a2a; border-radius: 8px; padding: 20px; text-align: center;
         height: 420px; display:flex; flex-direction:column; justify-content:center;
@@ -43,17 +40,12 @@ st.markdown("""
     .yellow {color: #fbbd08;}
     .white {color: #ffffff;}
 
-    /* Selectbox styling */
     div[data-testid="stSelectbox"] label {color: white !important; font-size: 12px !important;}
     div[data-testid="stSelectbox"] {margin-bottom: -8px; margin-top: -8px;}
 
-    /* Hide folium iframe border & tighten */
     iframe {border: none !important; border-radius: 6px;}
-
-    /* Plotly chart containers */
     [data-testid="stPlotlyChart"] {margin-top: -10px;}
 
-    /* Sidebar styling */
     [data-testid="stSidebar"] {background-color: #1e1e1e;}
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] li {color: #ccc; font-size: 13px;}
@@ -63,11 +55,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Title ──
+# ── Title (centered, larger) ──
 st.markdown('<p class="main-title">California Fatal Collision Overview (2011–2022)</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Pedestrian, Cyclist, and Other Traffic</p>', unsafe_allow_html=True)
 
-# ── Sidebar: About & Sources ──
+# ── Sidebar ──
 with st.sidebar:
     st.markdown("### ℹ️  About This Dashboard")
     st.markdown("""
@@ -75,6 +67,9 @@ This dashboard visualizes **fatal traffic collisions** across California's 58 co
 from 2011 to 2022, covering pedestrian, cyclist, and other traffic fatalities.
 It helps identify where fatal crashes concentrate and how they break down by victim
 type and location characteristics.
+
+**All sections are interactive** — use the victim role filter to update the map,
+KPI card, line chart, and bar chart simultaneously.
     """)
 
     st.markdown("---")
@@ -100,11 +95,15 @@ Suburban Places in California"*](https://journals.sagepub.com/doi/abs/10.1177/03
 (Frost, A.R. et al., 2018, *Transportation Research Record*, 2672(3), 130–144).
     """)
 
-# ── Load pre-aggregated data (tiny files, not 3.5M rows) ──
+# ── Load pre-aggregated data ──
 @st.cache_data
 def load_kpis():
     with open("aggregated/kpis.json") as f:
         return json.load(f)
+
+@st.cache_data
+def load_role_kpis():
+    return pd.read_parquet("aggregated/role_kpis.parquet")
 
 @st.cache_data
 def load_county_stats():
@@ -119,12 +118,20 @@ def load_role_counts():
     return pd.read_parquet("aggregated/role_counts.parquet")
 
 @st.cache_data
-def load_int_by_year():
-    return pd.read_parquet("aggregated/int_by_year.parquet")
+def load_fat_by_year():
+    return pd.read_parquet("aggregated/fat_by_year.parquet")
 
 @st.cache_data
-def load_rtor():
-    return pd.read_parquet("aggregated/rtor_by_placetype.parquet")
+def load_fat_by_year_role():
+    return pd.read_parquet("aggregated/fat_by_year_role.parquet")
+
+@st.cache_data
+def load_fat_by_placetype():
+    return pd.read_parquet("aggregated/fat_by_placetype.parquet")
+
+@st.cache_data
+def load_fat_by_placetype_role():
+    return pd.read_parquet("aggregated/fat_by_placetype_role.parquet")
 
 @st.cache_data
 def load_counties():
@@ -135,32 +142,18 @@ def load_counties():
     return counties
 
 kpis = load_kpis()
+role_kpis_df = load_role_kpis()
 county_stats = load_county_stats()
 role_county = load_role_county()
 role_counts = load_role_counts()
-int_by_year = load_int_by_year()
-rtor_counts = load_rtor()
+fat_by_year = load_fat_by_year()
+fat_by_year_role = load_fat_by_year_role()
+fat_by_pt = load_fat_by_placetype()
+fat_by_pt_role = load_fat_by_placetype_role()
 counties = load_counties()
 
-# ── KPIs ──
-total_killed = kpis["total_killed"]
-total_rows = kpis["total_rows"]
-ped_killed = kpis["ped_killed"]
-cyc_killed = kpis["cyc_killed"]
-other_killed = kpis["other_killed"]
-
-# ── Prepare merged county geodata ──
+# ── Colors & helpers ──
 pie_colors = {"Driver": "#b07cc6", "Passenger": "#c75b7a", "Pedestrian": "#d4845e", "Bicyclist": "#5b9ec9", "Other": "#888888"}
-
-color_map = {
-    "Urban Centers": "#5a4e3a",
-    "Urban Places": "#c0522e",
-    "Compact Suburban Places": "#d4882b",
-    "Suburban Places": "#c9a84c",
-    "Rural Places": "#7ba05b",
-    "Employment Centers": "#6b8a3a",
-    "Special Districts": "#d1d1d1",
-}
 
 counties_merged = counties.merge(county_stats, left_on="NAME_UPPER", right_on="COUNTY", how="left").fillna(0)
 
@@ -178,27 +171,45 @@ def fmt_k(n):
 # ════════════════════════════════════════════════════════
 r1c1, r1c2, r1c3, r1c4 = st.columns([0.8, 2.5, 0.8, 1.2])
 
-with r1c1:
-    st.markdown(
-        f"""
-    <div class="kpi-box-tall">
-        <p class="kpi-label-big red">Overall Fatal Collisions</p>
-        <p class="kpi-value-big red">💓 {fmt_k(total_killed)}</p>
-        <p class="kpi-sub">From {fmt_k(total_rows)} casualties</p>
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
+# ── Col 2 first: get filter selection (needed by Col 1) ──
 with r1c2:
     selected_role = st.selectbox(
-        "Filter map by victim role:",
+        "Filter by victim role:",
         ["All Fatalities", "Driver", "Passenger", "Pedestrian", "Bicyclist", "Other"],
         key="role_filter",
     )
     if selected_role == "All Fatalities":
         selected_role = None
 
+# ── Col 1: Interactive KPI card ──
+with r1c1:
+    if selected_role:
+        role_row = role_kpis_df[role_kpis_df["Role"] == selected_role]
+        if len(role_row) > 0:
+            kpi_killed = int(role_row["total_killed"].values[0])
+            kpi_rows = int(role_row["total_rows"].values[0])
+        else:
+            kpi_killed = 0
+            kpi_rows = 0
+        kpi_title = f"{selected_role} Fatalities"
+    else:
+        kpi_killed = kpis["total_killed"]
+        kpi_rows = kpis["total_rows"]
+        kpi_title = "Overall Fatalities"
+
+    st.markdown(
+        f"""
+    <div class="kpi-box-tall">
+        <p class="kpi-label-big red">{kpi_title}</p>
+        <p class="kpi-value-big red">💓 {fmt_k(kpi_killed)}</p>
+        <p class="kpi-sub">From {fmt_k(kpi_rows)} casualties</p>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+# ── Col 2 continued: Map ──
+with r1c2:
     if selected_role:
         role_data = role_county[role_county["Role"] == selected_role]
         role_data_county = role_data.rename(columns={"fatalities": "display_fatalities"})
@@ -321,12 +332,13 @@ with r1c2:
 
     st_folium(m, width=None, height=380, returned_objects=[])
 
+# ── Col 3: Ped / Cyclist / Other KPIs (static) ──
 with r1c3:
     st.markdown(
         f"""
     <div class="kpi-box">
         <p class="kpi-label red">Pedestrian Fatalities</p>
-        <p class="kpi-value white">🚶 {fmt_k(ped_killed)}</p>
+        <p class="kpi-value white">🚶 {fmt_k(kpis['ped_killed'])}</p>
     </div>
     """,
         unsafe_allow_html=True,
@@ -335,7 +347,7 @@ with r1c3:
         f"""
     <div class="kpi-box">
         <p class="kpi-label green">Cyclist Fatalities</p>
-        <p class="kpi-value white">🚴 {fmt_k(cyc_killed)}</p>
+        <p class="kpi-value white">🚴 {fmt_k(kpis['cyc_killed'])}</p>
     </div>
     """,
         unsafe_allow_html=True,
@@ -344,14 +356,14 @@ with r1c3:
         f"""
     <div class="kpi-box">
         <p class="kpi-label yellow">Other Traffic Fatalities</p>
-        <p class="kpi-value white">🚗 {fmt_k(other_killed)}</p>
+        <p class="kpi-value white">🚗 {fmt_k(kpis['other_killed'])}</p>
     </div>
     """,
         unsafe_allow_html=True,
     )
 
+# ── Col 4: Pie chart (intersection fatalities — stays static) ──
 with r1c4:
-    # Build legend HTML
     total_count = role_counts["Count"].sum()
     legend_items = ""
     for _, row in role_counts.iterrows():
@@ -388,27 +400,34 @@ with r1c4:
     st.markdown(f'<div style="padding:0 10px;">{legend_items}</div>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════
-# ROW 2 — Line chart + Bar chart
+# ROW 2 — Interactive Line chart + Interactive Bar chart
 # ════════════════════════════════════════════════════════
 r2c1, r2c2 = st.columns(2)
 
 with r2c1:
+    if selected_role:
+        year_data = fat_by_year_role[fat_by_year_role["Role"] == selected_role]
+        line_title = f"{selected_role} Fatalities by Year"
+    else:
+        year_data = fat_by_year
+        line_title = "Fatalities by Year"
+
     fig_line = go.Figure()
     fig_line.add_trace(
         go.Scatter(
-            x=int_by_year["YEAR"],
-            y=int_by_year["NUMBER_KILLED"],
+            x=year_data["YEAR"],
+            y=year_data["NUMBER_KILLED"],
             mode="lines+markers",
             line=dict(color="#e8465f", width=2),
             marker=dict(size=6, color="#e8465f"),
             fill="tozeroy",
             fillcolor="rgba(232,70,95,0.15)",
             hovertemplate="Year: %{x}<br>Fatalities: %{customdata:,}<extra></extra>",
-            customdata=int_by_year["NUMBER_KILLED"],
+            customdata=year_data["NUMBER_KILLED"],
         )
     )
     fig_line.update_layout(
-        title=dict(text="Overall Fatality Counts at Intersection by Year", font=dict(color="white", size=14)),
+        title=dict(text=line_title, font=dict(color="white", size=14)),
         plot_bgcolor="#1e1e1e",
         paper_bgcolor="#1e1e1e",
         font=dict(color="white"),
@@ -420,25 +439,32 @@ with r2c1:
     st.plotly_chart(fig_line, use_container_width=True)
 
 with r2c2:
-    rtor_sorted = rtor_counts.sort_values("Count", ascending=True)
+    if selected_role:
+        pt_data = fat_by_pt_role[fat_by_pt_role["Role"] == selected_role]
+        bar_title = f"{selected_role} Fatalities by Place Type"
+    else:
+        pt_data = fat_by_pt
+        bar_title = "Fatalities by Place Type"
+
+    pt_sorted = pt_data.sort_values("Count", ascending=True)
     fig_bar = go.Figure(
         go.Bar(
-            x=rtor_sorted["Count"],
-            y=rtor_sorted["PlaceType"],
+            x=pt_sorted["Count"],
+            y=pt_sorted["PlaceType"],
             orientation="h",
             marker_color="#f0ead6",
-            text=rtor_sorted["Count"].apply(lambda x: f"{x:,}"),
+            text=pt_sorted["Count"].apply(lambda x: f"{x:,}"),
             textposition="outside",
             textfont=dict(color="white", size=12),
             hoverinfo="none",
         )
     )
     fig_bar.update_layout(
-        title=dict(text="RTOR Fatality Counts by Place Typology", font=dict(color="white", size=14)),
+        title=dict(text=bar_title, font=dict(color="white", size=14)),
         plot_bgcolor="#1e1e1e",
         paper_bgcolor="#1e1e1e",
         font=dict(color="white"),
-        xaxis=dict(showgrid=True, gridcolor="#333", range=[0, rtor_sorted["Count"].max() * 1.15]),
+        xaxis=dict(showgrid=True, gridcolor="#333", range=[0, pt_sorted["Count"].max() * 1.15]),
         yaxis=dict(showgrid=False),
         height=340,
         margin=dict(l=10, r=70, t=50, b=40),
